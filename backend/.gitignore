@@ -1,0 +1,31 @@
+# Python virtual environments
+venv/
+.venv/
+env/
+.env/
+
+# Byte-code files
+*.pyc
+__pycache__/
+
+# OS and Editor files
+.DS_Store
+.vscode/
+.idea/
+Thumbs.db
+
+# Logs and databases
+*.log
+*.sqlite
+*.sqlite3
+
+# Test coverage output
+.pytest_cache/
+htmlcov/
+
+# Environment variable files
+.env
+config.env
+
+# Docker ignore file (if using Docker)
+.dockerignore

@@ -1,0 +1,55 @@
+# ============================================
+# FILE: docker-compose.yml (Root directory)
+# ============================================
+version: '3.8'
+
+services:
+  # Frontend React Application
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: rag-chatbot-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
+      - CHOKIDAR_USEPOLLING=true  # For hot reload in Docker
+    volumes:
+      - ./frontend/src:/app/src  # Hot reload in development
+      - ./frontend/public:/app/public
+      - /app/node_modules  # Prevent overwriting node_modules
+    depends_on:
+      - backend
+    networks:
+      - rag-network
+    stdin_open: true  # Keep container running
+    tty: true
+
+  # Backend Python/FastAPI Application
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: rag-chatbot-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - ENVIRONMENT=development
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./backend/app:/app/app  # Hot reload in development
+      - ./backend/uploads:/app/uploads  # Persistent document storage
+      - ./backend/vector_db:/app/vector_db  # Persistent vector database
+    networks:
+      - rag-network
+
+networks:
+  rag-network:
+    driver: bridge
+
+volumes:
+  uploads:
+  vector_db:
