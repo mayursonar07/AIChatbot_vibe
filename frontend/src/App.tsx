@@ -181,6 +181,24 @@ function App() {
   };
   
   /**
+   * Clear knowledge base (all uploaded documents)
+   */
+  const handleClearKnowledgeBase = async () => {
+    if (!window.confirm('Clear all uploaded documents from knowledge base? This cannot be undone.')) {
+      return;
+    }
+    
+    try {
+      await axios.delete(`${API_URL}/api/clear`);
+      setUploadedFiles([]);
+      showNotification('success', 'Knowledge base cleared successfully');
+    } catch (error: any) {
+      console.error('Clear error:', error);
+      showNotification('error', error.response?.data?.detail || 'Failed to clear knowledge base');
+    }
+  };
+  
+  /**
    * Handle Enter key press
    */
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -271,15 +289,27 @@ function App() {
               {uploadedFiles.length === 0 ? (
                 <p className="empty-state">No documents uploaded yet</p>
               ) : (
-                uploadedFiles.map(file => (
-                  <div key={file.file_id} className="file-item">
-                    <FileText size={16} />
-                    <div className="file-info">
-                      <span className="file-name">{file.filename}</span>
-                      <span className="file-chunks">{file.chunks_created} chunks</span>
+                <>
+                  {uploadedFiles.map(file => (
+                    <div key={file.file_id} className="file-item">
+                      <FileText size={16} />
+                      <div className="file-info">
+                        <span className="file-name">{file.filename}</span>
+                        <span className="file-chunks">{file.chunks_created} chunks</span>
+                      </div>
                     </div>
-                  </div>
-                ))
+                  ))}
+                  
+                  {/* Clear Knowledge Base Button */}
+                  <button 
+                    className="btn btn-secondary btn-block"
+                    onClick={handleClearKnowledgeBase}
+                    style={{ marginTop: '10px' }}
+                  >
+                    <Trash2 size={16} />
+                    Clear Knowledge Base
+                  </button>
+                </>
               )}
             </div>
           </div>

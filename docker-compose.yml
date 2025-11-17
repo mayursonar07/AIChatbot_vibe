@@ -9,6 +9,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      target: development  # Use development stage for hot reload
     container_name: rag-chatbot-frontend
     ports:
       - "3000:3000"
