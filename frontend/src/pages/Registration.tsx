@@ -22,7 +22,7 @@ function Registration() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  
+
   const [formData, setFormData] = useState<RegistrationFormData>({
     partnerType: 'External',
     technicalContactName: '',
@@ -49,7 +49,7 @@ function Registration() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Validate required fields
     const requiredFields: (keyof RegistrationFormData)[] = [
       'technicalContactName',
@@ -80,15 +80,15 @@ function Registration() {
 
     try {
       // TODO: Replace with actual API endpoint when provided
-      await axios.post('/api/registration', formData);
-      
+      // await axios.post('/api/registration', formData);
+
       showNotification('success', 'Registration submitted successfully!');
-      
+
       // Reset form after successful submission
       setTimeout(() => {
         navigate('/');
       }, 2000);
-      
+
     } catch (error: any) {
       console.error('Registration error:', error);
       showNotification('error', error.response?.data?.detail || 'Registration failed. Please try again.');
