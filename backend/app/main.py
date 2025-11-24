@@ -8,7 +8,7 @@ import os
 from dotenv import load_dotenv
 
 from app.rag_engine import RAGEngine
-from app.models import ChatRequest, ChatResponse, DocumentUploadResponse
+from app.models import ChatRequest, ChatResponse, DocumentUploadResponse, EntityMatchRequest, EntityMatchResponse
 
 # Load environment variables
 load_dotenv()
@@ -118,7 +118,7 @@ async def upload_document(file: UploadFile = File(...)):
     """
     Document upload endpoint
     
-    Accepts various file formats (PDF, TXT, DOCX, PPTX, XLSX),
+    Accepts various file formats (PDF, TXT, DOCX, PPTX, XLSX, JSON),
     processes them into chunks, and stores in vector database.
     """
     if not rag_engine:
@@ -128,7 +128,7 @@ async def upload_document(file: UploadFile = File(...)):
         )
     
     # Validate file type
-    allowed_extensions = {'.pdf', '.txt', '.docx', '.doc', '.pptx', '.ppt', '.xlsx', '.xls'}
+    allowed_extensions = {'.pdf', '.txt', '.docx', '.doc', '.pptx', '.ppt', '.xlsx', '.xls', '.json'}
     file_ext = os.path.splitext(file.filename)[1].lower()
     
     if file_ext not in allowed_extensions:
@@ -215,6 +215,34 @@ async def clear_knowledge_base():
         raise HTTPException(
             status_code=500,
             detail=f"Error clearing knowledge base: {str(e)}"
+        )
+
+
+@app.post("/api/match-entity", response_model=EntityMatchResponse)
+async def match_entity(request: EntityMatchRequest):
+    """
+    Entity matching endpoint using RAG
+    
+    Uses the uploaded entities.json and RAG to match user descriptions
+    to exact entity names with confidence scores.
+    """
+    if not rag_engine:
+        raise HTTPException(
+            status_code=503,
+            detail="RAG engine not initialized"
+        )
+    
+    try:
+        response = await rag_engine.match_entities(
+            query=request.query,
+            session_id=request.session_id
+        )
+        return response
+    except Exception as e:
+        print(f"Entity matching error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error matching entities: {str(e)}"
         )
 
 

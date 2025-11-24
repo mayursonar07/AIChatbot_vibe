@@ -1,0 +1,12 @@
+[
+  { "id": 1, "name": "Charles Schwab Corporation", "shortCode": "SCHW", "category": "Custodian", "description": "Leading brokerage and banking services" },
+  { "id": 2, "name": "Schwab Clearing Services", "shortCode": "SCS", "category": "Clearing House", "description": "Clearing and settlement operations" },
+  { "id": 3, "name": "Fidelity Investments", "shortCode": "FID", "category": "Custodian", "description": "Investment management and retirement services" },
+  { "id": 4, "name": "Fidelity Clearing & Custody", "shortCode": "FCC", "category": "Clearing House", "description": "Custody and clearing solutions" },
+  { "id": 5, "name": "Vanguard Group", "shortCode": "VAN", "category": "Fund Services", "description": "Index funds and ETF provider" },
+  { "id": 6, "name": "BlackRock Fund Services", "shortCode": "BFS", "category": "Fund Services", "description": "Global fund administration" },
+  { "id": 7, "name": "State Street Corporation", "shortCode": "STT", "category": "Custodian", "description": "Institutional custody services" },
+  { "id": 8, "name": "BNY Mellon Asset Servicing", "shortCode": "BNY", "category": "Custodian", "description": "Global asset servicing solutions" },
+  { "id": 9, "name": "Northern Trust Securities", "shortCode": "NTS", "category": "Custodian", "description": "Wealth management and custody" },
+  { "id": 10, "name": "Goldman Sachs Custody", "shortCode": "GSC", "category": "Custodian", "description": "Prime brokerage and custody" }
+]

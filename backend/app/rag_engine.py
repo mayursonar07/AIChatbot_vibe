@@ -20,7 +20,7 @@ from langchain_community.document_loaders import (
     UnstructuredExcelLoader
 )
 
-from app.models import ChatResponse, DocumentUploadResponse, SourceDocument
+from app.models import ChatResponse, DocumentUploadResponse, SourceDocument, EntityMatchResponse, EntityMatch
 
 
 class RAGEngine:
@@ -266,6 +266,8 @@ Helpful Answer:""",
                 loader = PyPDFLoader(file_path)
             elif file_extension == ".txt":
                 loader = TextLoader(file_path, encoding='utf-8')
+            elif file_extension == ".json":
+                loader = TextLoader(file_path, encoding='utf-8')
             elif file_extension in [".docx", ".doc"]:
                 loader = Docx2txtLoader(file_path)
             elif file_extension in [".pptx", ".ppt"]:
@@ -348,6 +350,91 @@ Helpful Answer:""",
                 "error": str(e),
                 "status": "error"
             }
+    
+    async def match_entities(
+        self,
+        query: str,
+        session_id: Optional[str] = None
+    ) -> EntityMatchResponse:
+        """
+        Match user query to entities using RAG or direct LLM analysis
+        
+        Args:
+            query: User's description or query about entities
+            session_id: Optional session identifier
+            
+        Returns:
+            EntityMatchResponse with matched entities and explanation
+        """
+        import json
+        import re
+        
+        try:
+            # First try to find entities from uploaded documents
+            has_documents = self.vector_store._collection.count() > 0
+            
+            if has_documents:
+                # Search for entity-related documents
+                docs_with_scores = self.vector_store.similarity_search_with_score(
+                    f"entity information: {query}", k=5
+                )
+                
+                context = "\n\n".join([doc.page_content for doc, _ in docs_with_scores])
+            else:
+                context = "No entity documents uploaded yet."
+            
+            # Use LLM to match entities
+            prompt = f"""Based on the user query and available context, identify matching entities.
+            
+User Query: {query}
+
+Available Context:
+{context}
+
+Please analyze the query and provide:
+1. A list of matching entities in JSON format with fields: name, shortCode, category, and confidence (0.0-1.0)
+2. A brief explanation of why these entities match
+
+Response format:
+{{
+    "matches": [
+        {{"name": "Entity Name", "shortCode": "CODE", "category": "Category", "confidence": 0.95}}
+    ],
+    "explanation": "Brief explanation of the matches"
+}}
+
+If no specific entities are found in the context, provide an empty matches array and helpful explanation."""
+
+            response = self.llm.predict(prompt)
+            
+            # Parse JSON response
+            try:
+                # Extract JSON from response
+                json_match = re.search(r'\{.*\}', response, re.DOTALL)
+                if json_match:
+                    result = json.loads(json_match.group())
+                    matches = [EntityMatch(**m) for m in result.get("matches", [])]
+                    explanation = result.get("explanation", response)
+                else:
+                    # Fallback if JSON not found
+                    matches = []
+                    explanation = response
+            except Exception as parse_error:
+                print(f"Error parsing entity match response: {parse_error}")
+                matches = []
+                explanation = response
+            
+            return EntityMatchResponse(
+                matches=matches,
+                explanation=explanation
+            )
+            
+        except Exception as e:
+            print(f"Error in entity matching: {str(e)}")
+            return EntityMatchResponse(
+                matches=[],
+                explanation=f"Error matching entities: {str(e)}"
+            )
     
     def clear_vector_store(self) -> dict:
         """Clear all documents from the vector store"""

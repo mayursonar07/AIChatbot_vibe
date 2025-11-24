@@ -35,3 +35,23 @@ class DocumentUploadResponse(BaseModel):
     file_id: Optional[str] = Field(None, description="Unique identifier for the uploaded file")
     filename: Optional[str] = Field(None, description="Name of the uploaded file")
     chunks_created: Optional[int] = Field(None, description="Number of text chunks created")
+
+
+class EntityMatchRequest(BaseModel):
+    """Request model for entity matching"""
+    query: str = Field(..., description="User query to match against entities")
+    session_id: Optional[str] = Field(None, description="Session ID for context")
+
+
+class EntityMatch(BaseModel):
+    """Model for a matched entity"""
+    name: str = Field(..., description="Entity name")
+    shortCode: str = Field(..., description="Entity short code")
+    category: str = Field(..., description="Entity category")
+    confidence: float = Field(..., description="Match confidence score")
+
+
+class EntityMatchResponse(BaseModel):
+    """Response model for entity matching"""
+    matches: List[EntityMatch] = Field(..., description="List of matched entities")
+    explanation: str = Field(..., description="AI explanation of the matches")
