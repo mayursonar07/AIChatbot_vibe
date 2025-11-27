@@ -8,7 +8,18 @@ import os
 from dotenv import load_dotenv
 
 from app.rag_engine import RAGEngine
-from app.models import ChatRequest, ChatResponse, DocumentUploadResponse, EntityMatchRequest, EntityMatchResponse
+from app.models import (
+    ChatRequest, 
+    ChatResponse, 
+    DocumentUploadResponse, 
+    EntityMatchRequest, 
+    EntityMatchResponse,
+    TextIngestionRequest,
+    TextIngestionResponse,
+    DocumentUpdateRequest,
+    DocumentDeleteRequest,
+    DocumentDeleteResponse
+)
 
 # Load environment variables
 load_dotenv()
@@ -166,6 +177,143 @@ async def upload_document(file: UploadFile = File(...)):
         raise HTTPException(
             status_code=500,
             detail=f"Error uploading document: {str(e)}"
+        )
+
+
+@app.post("/api/ingest", response_model=DocumentUploadResponse)
+async def ingest_text(request: TextIngestionRequest):
+    """
+    Ingest raw text/JSON content directly into the knowledge base
+    
+    Accepts text or JSON data via API and creates embeddings without file upload.
+    Useful for programmatically adding data to the RAG system.
+    """
+    if not rag_engine:
+        raise HTTPException(
+            status_code=503,
+            detail="RAG engine not initialized"
+        )
+    
+    try:
+        print(f"📝 Ingesting text document: {request.document_name}")
+        print(f"📊 Content length: {len(request.content)} chars")
+        
+        # Process text through RAG engine
+        result = await rag_engine.ingest_text(
+            content=request.content,
+            document_name=request.document_name,
+            metadata=request.metadata or {}
+        )
+        
+        if not result["success"]:
+            raise HTTPException(status_code=500, detail=result["message"])
+        
+        return DocumentUploadResponse(
+            success=result["success"],
+            message=result["message"],
+            file_id=result["document_id"],
+            filename=request.document_name,
+            chunks_created=result["chunks_created"]
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Ingestion error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error ingesting text: {str(e)}"
+        )
+
+
+@app.put("/api/document/{document_id}", response_model=DocumentUploadResponse)
+async def update_document(document_id: str, request: DocumentUpdateRequest):
+    """
+    Update an existing document in the knowledge base
+    
+    Deletes old embeddings and creates new ones with updated content.
+    Useful for keeping entity information fresh and avoiding stale data.
+    """
+    if not rag_engine:
+        raise HTTPException(
+            status_code=503,
+            detail="RAG engine not initialized"
+        )
+    
+    # Validate document_id matches
+    if document_id != request.document_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Document ID in URL and body must match"
+        )
+    
+    try:
+        print(f"📝 Updating document: {document_id}")
+        
+        result = await rag_engine.update_document(
+            document_id=request.document_id,
+            content=request.content,
+            document_name=request.document_name,
+            metadata=request.metadata or {}
+        )
+        
+        if not result["success"]:
+            raise HTTPException(status_code=404, detail=result["message"])
+        
+        return DocumentUploadResponse(
+            success=result["success"],
+            message=result["message"],
+            file_id=result["document_id"],
+            filename=request.document_name or "updated_document",
+            chunks_created=result["chunks_created"]
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Update error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error updating document: {str(e)}"
+        )
+
+
+@app.delete("/api/document/{document_id}", response_model=DocumentDeleteResponse)
+async def delete_document(document_id: str):
+    """
+    Delete a specific document from the knowledge base
+    
+    Removes all embeddings for this document. Use this when entities are
+    deleted from your source system to keep the knowledge base in sync.
+    """
+    if not rag_engine:
+        raise HTTPException(
+            status_code=503,
+            detail="RAG engine not initialized"
+        )
+    
+    try:
+        print(f"🗑️  Deleting document: {document_id}")
+        
+        result = await rag_engine.delete_document(document_id)
+        
+        if not result["success"]:
+            raise HTTPException(status_code=404, detail=result["message"])
+        
+        return DocumentDeleteResponse(
+            success=result["success"],
+            message=result["message"],
+            document_id=result["document_id"],
+            chunks_deleted=result["chunks_deleted"]
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Delete error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error deleting document: {str(e)}"
         )
 
 

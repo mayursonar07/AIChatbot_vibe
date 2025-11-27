@@ -343,12 +343,46 @@ docker-compose build --no-cache
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/` | Health check |
-| POST | `/api/upload` | Upload document |
-| POST | `/api/chat` | Send message |
-| GET | `/api/history/{session_id}` | Get chat history |
-| DELETE | `/api/session/{session_id}` | Clear session |
-| GET | `/api/stats` | Get system stats |
-| POST | `/api/clear-knowledge-base` | Clear all documents |
+| GET | `/health` | Health status with vector store info |
+| POST | `/api/chat` | Send message with RAG |
+| POST | `/api/upload` | Upload document (PDF, DOCX, etc.) |
+| POST | `/api/ingest` | ✨ **CREATE** entity programmatically |
+| PUT | `/api/document/{id}` | ✨ **UPDATE** existing entity |
+| DELETE | `/api/document/{id}` | ✨ **DELETE** specific entity |
+| GET | `/api/stats` | Get vector store statistics |
+| DELETE | `/api/clear` | Clear all documents and embeddings |
+
+### 🆕 Entity Lifecycle Management (NEW!)
+
+**Prevent stale data** with full CRUD operations for entities:
+
+```bash
+# CREATE entity
+curl -X POST http://localhost:8000/api/ingest \
+  -H "Content-Type: application/json" \
+  -d '{"content": "Apple Inc. - Technology company", "document_name": "apple"}'
+
+# UPDATE entity (use document_id from CREATE response)
+curl -X PUT http://localhost:8000/api/document/YOUR-UUID \
+  -H "Content-Type: application/json" \
+  -d '{"document_id": "YOUR-UUID", "content": "Apple Inc. - Updated content"}'
+
+# DELETE entity
+curl -X DELETE http://localhost:8000/api/document/YOUR-UUID
+```
+
+**Perfect for:**
+- ✅ Database synchronization (update embeddings when entities change)
+- ✅ Webhook integrations (real-time updates from external systems)
+- ✅ Scheduled syncs (batch update entities daily)
+- ✅ API-first workflows (no manual file uploads needed)
+
+**📖 Complete Documentation:**
+- **[QUICK_START.md](./QUICK_START.md)** - 5-minute integration guide
+- **[ENTITY_LIFECYCLE_GUIDE.md](./ENTITY_LIFECYCLE_GUIDE.md)** - Complete patterns & database integration
+- **[ENTITY_INTEGRATION.md](./ENTITY_INTEGRATION.md)** - Implementation examples
+- **[API_INGESTION_GUIDE.md](./API_INGESTION_GUIDE.md)** - Full API reference
+- **[QUICK_API_REFERENCE.md](./QUICK_API_REFERENCE.md)** - Quick reference card
 
 Full API documentation: http://localhost:8000/docs
 

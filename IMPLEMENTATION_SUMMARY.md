@@ -1,53 +1,46 @@
-# Implementation Summary - RAG-Powered Entity Assistance
+# Implementation Summary: Stale Data Prevention
 
-## ✅ Completed Implementation
+## 🎯 Problem Solved
 
-### 1. Frontend Integration (App.tsx)
-**Before:** Mock AI responses, hardcoded entities
-**After:** Real RAG API integration with smart entity detection
+**User Requirement:** *"If the entities are modified or deleted then our vector embeddings should also be updated or deleted... we do not want to run into the scenario that our AI is producing results on stale entities"*
 
-**Key Changes:**
-```typescript
-// ✅ Import entities from JSON
-import entitiesData from './data/entities.json';
+**Solution:** Full entity lifecycle management with CREATE/UPDATE/DELETE operations.
 
-// ✅ Enhanced Message interface
-interface Message {
-  sources?: Array<SourceDocument>;
-  matchedEntities?: Array<EntityInfo>;
-}
+---
 
-// ✅ Real API integration
-const response = await axios.post(`${API_URL}/api/chat`, {
-  message: enhancedMessage,
-  session_id: sessionId,
-  use_rag: useRag
-});
+## 🛠️ What Was Built
 
-// ✅ Entity extraction from responses
-const findMatchedEntities = (text: string) => {
-  // Regex matching for entity names and codes
-}
-```
+### 1. Backend Changes
 
-**UI Enhancements:**
-- ✅ Loading spinner during API calls
-- ✅ Green-highlighted entity badges
-- ✅ Blue-highlighted source documents
-- ✅ Disabled states for inputs during loading
-- ✅ Error handling with user-friendly messages
+#### `backend/app/rag_engine.py`
+Added three new methods to `RAGEngine` class:
 
-### 2. Backend Entity Matching (main.py, rag_engine.py, models.py)
-
-**New Endpoint:**
 ```python
-@app.post("/api/match-entity", response_model=EntityMatchResponse)
-async def match_entity(request: EntityMatchRequest):
-    """Match user descriptions to exact entity names"""
-    return await rag_engine.match_entities(
-        query=request.query,
-        session_id=request.session_id
-    )
+def ingest_text(self, content: str, document_name: str, metadata: dict) -> dict:
+    """
+    CREATE operation - ingest raw text/JSON without file upload
+    - Generates unique document_id (UUID)
+    - Chunks text (1000 chars, 200 overlap)
+    - Creates embeddings
+    - Stores in ChromaDB with metadata
+    """
+
+def update_document(self, document_id: str, content: str, ...) -> dict:
+    """
+    UPDATE operation - replace existing document
+    - Finds all chunks by document_id
+    - Deletes old chunks
+    - Ingests new content with SAME document_id
+    - Merges metadata (new overrides old)
+    """
+
+def delete_document(self, document_id: str) -> dict:
+    """
+    DELETE operation - remove specific document
+    - Queries ChromaDB: where={"document_id": doc_id}
+    - Deletes all chunks
+    - Returns chunks_deleted count
+    """
 ```
 
 **New Models:**

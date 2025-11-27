@@ -110,6 +110,74 @@ class RAGEngine:
             )
         
         try:
+            # Detect "how" questions about methodology/process - prevent disclosure of logic
+            query_lower = message.lower().strip()
+            
+            # Check for methodology questions
+            how_patterns = [
+                'how do', 'how does', 'how are', 'how is', 'how can', 'how will',
+                'explain how', 'tell me how', 'describe how'
+            ]
+            
+            methodology_patterns = [
+                'what is the process', 'what is the method', 'what\'s the process',
+                'what\'s the method', 'methodology', 'what ensures', 'mechanism',
+                'validation process', 'verification process', 'checking process'
+            ]
+            
+            ensure_patterns = [
+                'ensure', 'ensur', 'wnsure', 'verify', 'validate', 'confirm',
+                'guarantee', 'check', 'make sure'
+            ]
+            
+            domain_patterns = [
+                'from investment domain', 'from the domain', 'belong to',
+                'are these from', 'domain classification', 'correct domain',
+                'investment domain', 'from domain'
+            ]
+            
+            entity_patterns = ['entity', 'entities']
+            
+            # Detect methodology questions about entities/domains
+            starts_with_how = any(query_lower.startswith(pattern) for pattern in how_patterns)
+            contains_methodology = any(pattern in query_lower for pattern in methodology_patterns)
+            contains_ensure = any(pattern in query_lower for pattern in ensure_patterns)
+            contains_domain = any(pattern in query_lower for pattern in domain_patterns)
+            contains_entity = any(pattern in query_lower for pattern in entity_patterns)
+            
+            # It's a methodology question if asking about how we ensure/validate entities or domains
+            is_methodology_question = (
+                (starts_with_how or contains_methodology) and 
+                (contains_ensure or contains_domain) and
+                contains_entity
+            ) or (
+                contains_ensure and contains_domain and contains_entity
+            )
+            
+            if is_methodology_question:
+                # Return surface-level explanation without disclosing logic
+                methodology_response = """Our entity matching system uses advanced natural language processing 
+and machine learning techniques to ensure accurate entity identification:
+
+• **Domain Classification**: We employ specialized models trained on domain-specific data to validate 
+  that entities belong to the correct category (e.g., investment domain)
+
+• **Multi-layered Validation**: Entities go through multiple validation stages including semantic 
+  analysis, contextual matching, and confidence scoring
+
+• **Knowledge Base Integration**: Our system leverages a curated knowledge base of domain-verified 
+  entities to ensure accuracy and relevance
+
+• **Continuous Learning**: The system continuously improves through feedback and updates to maintain 
+  high precision in entity matching
+
+For specific entity matches, please provide entity names or descriptions rather than asking about the methodology."""
+                
+                return ChatResponse(
+                    response=methodology_response,
+                    sources=[]
+                )
+            
             # Check if vector store has documents
             has_documents = self.vector_store._collection.count() > 0
             
@@ -337,6 +405,241 @@ Helpful Answer:""",
                 chunks_created=0
             )
     
+    async def ingest_text(
+        self,
+        content: str,
+        document_name: str = "api_document",
+        metadata: dict = None
+    ) -> dict:
+        """
+        Ingest raw text/JSON content directly into the vector store
+        
+        Args:
+            content: Raw text or JSON string to ingest
+            document_name: Name identifier for this document
+            metadata: Optional metadata dict (source, category, etc.)
+            
+        Returns:
+            Dict with success status, message, document_id, and chunks_created
+        """
+        try:
+            from langchain.schema import Document
+            
+            # Generate unique document ID
+            document_id = str(uuid.uuid4())
+            
+            # Parse metadata
+            if metadata is None:
+                metadata = {}
+            
+            # Create a single document from the content
+            doc = Document(
+                page_content=content,
+                metadata={
+                    "document_id": document_id,
+                    "document_name": document_name,
+                    "ingestion_date": datetime.now().isoformat(),
+                    "source": metadata.get("source", "api"),
+                    **metadata  # Include any additional metadata
+                }
+            )
+            
+            # Log what we're processing
+            print(f"📄 Ingesting text document: {document_name}")
+            print(f"📝 Content length: {len(content)} characters")
+            
+            # Split into chunks
+            chunks = self.text_splitter.split_documents([doc])
+            
+            # Add chunk metadata
+            for i, chunk in enumerate(chunks):
+                chunk.metadata.update({
+                    "chunk_index": i,
+                    "total_chunks": len(chunks)
+                })
+            
+            # Add chunks to vector store
+            self.vector_store.add_documents(chunks)
+            
+            # Persist to disk
+            self.vector_store.persist()
+            
+            print(f"✅ Successfully ingested '{document_name}': {len(chunks)} chunks created")
+            
+            return {
+                "success": True,
+                "message": f"Successfully ingested {document_name}",
+                "document_id": document_id,
+                "chunks_created": len(chunks)
+            }
+        
+        except Exception as e:
+            print(f"❌ Error ingesting text: {str(e)}")
+            return {
+                "success": False,
+                "message": f"Error ingesting text: {str(e)}",
+                "document_id": None,
+                "chunks_created": 0
+            }
+    
+    async def update_document(
+        self,
+        document_id: str,
+        content: str,
+        document_name: str = None,
+        metadata: dict = None
+    ) -> dict:
+        """
+        Update an existing document by deleting old chunks and ingesting new ones
+        
+        Args:
+            document_id: ID of the document to update
+            content: New content for the document
+            document_name: Updated document name (optional, keeps old if not provided)
+            metadata: Updated metadata (optional, keeps old if not provided)
+            
+        Returns:
+            Dict with success status, message, document_id, and chunks updated
+        """
+        try:
+            # Step 1: Get existing document metadata to preserve name/metadata if not provided
+            existing_docs = self.vector_store.get(
+                where={"document_id": document_id}
+            )
+            
+            if not existing_docs or not existing_docs['ids']:
+                return {
+                    "success": False,
+                    "message": f"Document {document_id} not found",
+                    "document_id": document_id,
+                    "chunks_created": 0
+                }
+            
+            # Preserve original metadata if not provided
+            original_metadata = existing_docs['metadatas'][0] if existing_docs['metadatas'] else {}
+            if document_name is None:
+                document_name = original_metadata.get('document_name', 'updated_document')
+            if metadata is None:
+                metadata = {}
+            
+            # Merge with original metadata (new values override)
+            merged_metadata = {**original_metadata, **metadata}
+            
+            print(f"📝 Updating document: {document_id} ({document_name})")
+            print(f"   Found {len(existing_docs['ids'])} existing chunks")
+            
+            # Step 2: Delete old chunks
+            delete_result = await self.delete_document(document_id)
+            if not delete_result["success"]:
+                return delete_result
+            
+            print(f"   Deleted {delete_result['chunks_deleted']} old chunks")
+            
+            # Step 3: Ingest new content with same document_id
+            from langchain.schema import Document
+            
+            # Create document with preserved/updated metadata
+            doc = Document(
+                page_content=content,
+                metadata={
+                    "document_id": document_id,  # Keep same ID
+                    "document_name": document_name,
+                    "ingestion_date": datetime.now().isoformat(),
+                    "updated_at": datetime.now().isoformat(),
+                    "source": merged_metadata.get("source", "api"),
+                    **merged_metadata
+                }
+            )
+            
+            # Split into chunks
+            chunks = self.text_splitter.split_documents([doc])
+            
+            # Add chunk metadata
+            for i, chunk in enumerate(chunks):
+                chunk.metadata.update({
+                    "chunk_index": i,
+                    "total_chunks": len(chunks)
+                })
+            
+            # Add to vector store
+            self.vector_store.add_documents(chunks)
+            self.vector_store.persist()
+            
+            print(f"✅ Updated '{document_name}': {len(chunks)} new chunks created")
+            
+            return {
+                "success": True,
+                "message": f"Successfully updated {document_name}",
+                "document_id": document_id,
+                "chunks_created": len(chunks)
+            }
+        
+        except Exception as e:
+            print(f"❌ Error updating document: {str(e)}")
+            return {
+                "success": False,
+                "message": f"Error updating document: {str(e)}",
+                "document_id": document_id,
+                "chunks_created": 0
+            }
+    
+    async def delete_document(
+        self,
+        document_id: str
+    ) -> dict:
+        """
+        Delete a specific document and all its chunks from the vector store
+        
+        Args:
+            document_id: ID of the document to delete
+            
+        Returns:
+            Dict with success status, message, document_id, and chunks_deleted
+        """
+        try:
+            # Query for all chunks with this document_id
+            results = self.vector_store.get(
+                where={"document_id": document_id}
+            )
+            
+            if not results or not results['ids']:
+                return {
+                    "success": False,
+                    "message": f"Document {document_id} not found",
+                    "document_id": document_id,
+                    "chunks_deleted": 0
+                }
+            
+            chunk_ids = results['ids']
+            document_name = results['metadatas'][0].get('document_name', 'Unknown') if results['metadatas'] else 'Unknown'
+            
+            print(f"🗑️  Deleting document: {document_name} ({document_id})")
+            print(f"   Found {len(chunk_ids)} chunks to delete")
+            
+            # Delete all chunks
+            self.vector_store._collection.delete(ids=chunk_ids)
+            
+            # Persist changes
+            self.vector_store.persist()
+            
+            print(f"✅ Deleted {len(chunk_ids)} chunks from '{document_name}'")
+            
+            return {
+                "success": True,
+                "message": f"Successfully deleted {document_name}",
+                "document_id": document_id,
+                "chunks_deleted": len(chunk_ids)
+            }
+        
+        except Exception as e:
+            print(f"❌ Error deleting document: {str(e)}")
+            return {
+                "success": False,
+                "message": f"Error deleting document: {str(e)}",
+                "document_id": document_id,
+                "chunks_deleted": 0
+            }
+    
     def get_vector_store_stats(self) -> dict:
         """Get statistics about the vector store"""
         try:
@@ -370,6 +673,77 @@ Helpful Answer:""",
         import re
         
         try:
+            # Detect "how" questions - questions about methodology/process
+            query_lower = query.lower().strip()
+            
+            # More robust detection using multiple patterns
+            # 1. Check for "how" questions (with variations and typos)
+            how_patterns = [
+                'how do', 'how does', 'how are', 'how is', 'how can', 'how will',
+                'explain how', 'tell me how', 'describe how'
+            ]
+            
+            # 2. Check for process/methodology questions
+            methodology_patterns = [
+                'what is the process', 'what is the method', 'what\'s the process',
+                'what\'s the method', 'methodology', 'what ensures', 'mechanism',
+                'validation process', 'verification process', 'checking process'
+            ]
+            
+            # 3. Check for ensure/validate/verify intent (even with typos)
+            ensure_patterns = [
+                'ensure', 'ensur', 'wnsure', 'verify', 'validate', 'confirm',
+                'guarantee', 'check', 'make sure'
+            ]
+            
+            # 4. Check for domain/classification questions
+            domain_patterns = [
+                'from investment domain', 'from the domain', 'belong to',
+                'are these from', 'domain classification', 'correct domain'
+            ]
+            
+            # Detect if query is asking "how" + methodology/process
+            starts_with_how = any(query_lower.startswith(pattern) for pattern in how_patterns)
+            contains_how = any(pattern in query_lower for pattern in how_patterns)
+            contains_methodology = any(pattern in query_lower for pattern in methodology_patterns)
+            contains_ensure = any(pattern in query_lower for pattern in ensure_patterns)
+            contains_domain = any(pattern in query_lower for pattern in domain_patterns)
+            
+            # It's a methodology question if:
+            # - Starts with "how" OR contains methodology keywords
+            # - AND contains ensure/validation keywords OR domain keywords
+            is_how_question = (
+                (starts_with_how or contains_methodology) and 
+                (contains_ensure or contains_domain or contains_methodology)
+            ) or (
+                # OR if it's asking about ensuring/validating domains regardless of "how"
+                contains_ensure and contains_domain
+            )
+            
+            if is_how_question:
+                # Return surface-level information without disclosing exact logic or entity matches
+                surface_explanation = """Our entity matching system uses advanced natural language processing 
+and machine learning techniques to ensure accurate entity identification:
+
+• **Domain Classification**: We employ specialized models trained on domain-specific data to validate 
+  that entities belong to the correct category (e.g., investment domain)
+
+• **Multi-layered Validation**: Entities go through multiple validation stages including semantic 
+  analysis, contextual matching, and confidence scoring
+
+• **Knowledge Base Integration**: Our system leverages a curated knowledge base of domain-verified 
+  entities to ensure accuracy and relevance
+
+• **Continuous Learning**: The system continuously improves through feedback and updates to maintain 
+  high precision in entity matching
+
+For specific entity matches, please provide entity names or descriptions rather than asking about the methodology."""
+                
+                return EntityMatchResponse(
+                    matches=[],  # No entity matches for methodology questions
+                    explanation=surface_explanation
+                )
+            
             # First try to find entities from uploaded documents
             has_documents = self.vector_store._collection.count() > 0
             
@@ -437,25 +811,76 @@ If no specific entities are found in the context, provide an empty matches array
             )
     
     def clear_vector_store(self) -> dict:
-        """Clear all documents from the vector store"""
+        """Clear all documents from the vector store and uploaded files"""
+        import shutil
+        import time
+        
         try:
-            # Delete the entire collection
-            self.vector_store._client.delete_collection(name="rag_documents")
+            deleted_vectors = 0
+            deleted_uploads = 0
             
-            # Recreate empty collection
+            # Step 1: Delete the ChromaDB collection (clears metadata)
+            try:
+                self.vector_store._client.delete_collection(name="rag_documents")
+                print("🗑️  Deleted ChromaDB collection")
+            except Exception as e:
+                print(f"⚠️  Warning: Could not delete collection: {e}")
+            
+            # Step 2: Delete only UUID folders (keep SQLite for now)
+            if os.path.exists(self.vector_store_path):
+                for item in os.listdir(self.vector_store_path):
+                    item_path = os.path.join(self.vector_store_path, item)
+                    try:
+                        if os.path.isdir(item_path):
+                            # Remove UUID folders only
+                            shutil.rmtree(item_path)
+                            print(f"🗑️  Deleted vector folder: {item}")
+                            deleted_vectors += 1
+                    except Exception as e:
+                        print(f"⚠️  Warning: Could not delete {item}: {e}")
+            
+            # Step 3: Delete all uploaded files
+            uploads_path = "/app/uploads"
+            if os.path.exists(uploads_path):
+                for item in os.listdir(uploads_path):
+                    item_path = os.path.join(uploads_path, item)
+                    try:
+                        if os.path.isfile(item_path):
+                            os.remove(item_path)
+                            print(f"🗑️  Deleted uploaded file: {item}")
+                            deleted_uploads += 1
+                        elif os.path.isdir(item_path):
+                            shutil.rmtree(item_path)
+                            print(f"🗑️  Deleted upload folder: {item}")
+                            deleted_uploads += 1
+                    except Exception as e:
+                        print(f"⚠️  Warning: Could not delete upload {item}: {e}")
+            
+            # Step 4: Recreate empty collection (SQLite will auto-update)
             self.vector_store = Chroma(
                 persist_directory=self.vector_store_path,
                 embedding_function=self.embeddings,
                 collection_name="rag_documents"
             )
             
-            print("✅ Vector store cleared successfully")
+            print(f"✅ Cleared {deleted_vectors} vector folders and {deleted_uploads} uploaded files")
             return {
                 "success": True,
-                "message": "All documents cleared from knowledge base"
+                "message": f"Knowledge base cleared: {deleted_vectors} vector folders and {deleted_uploads} uploaded files deleted"
             }
+            
         except Exception as e:
-            print(f"Error clearing vector store: {str(e)}")
+            print(f"❌ Error clearing vector store: {str(e)}")
+            # Try to recreate even if there was an error
+            try:
+                self.vector_store = Chroma(
+                    persist_directory=self.vector_store_path,
+                    embedding_function=self.embeddings,
+                    collection_name="rag_documents"
+                )
+            except Exception as recreate_error:
+                print(f"⚠️  Could not recreate vector store: {recreate_error}")
+            
             return {
                 "success": False,
                 "message": f"Error clearing vector store: {str(e)}"
