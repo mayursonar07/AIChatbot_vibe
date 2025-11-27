@@ -225,8 +225,10 @@ function ChatSidebar({ isOpen, onClose, useRag, uploadedFiles }: ChatSidebarProp
               </div>
             )}
             
-            {/* Display message content */}
-            <div className="ai-chat-message-content">{msg.content}</div>
+            {/* Display message content only if no entities are matched */}
+            {(!msg.matchedEntities || msg.matchedEntities.length === 0) && (
+              <div className="ai-chat-message-content">{msg.content}</div>
+            )}
           </div>
         ))}
         {loading && (

@@ -55,3 +55,39 @@ class EntityMatchResponse(BaseModel):
     """Response model for entity matching"""
     matches: List[EntityMatch] = Field(..., description="List of matched entities")
     explanation: str = Field(..., description="AI explanation of the matches")
+
+
+class TextIngestionRequest(BaseModel):
+    """Request model for direct text/data ingestion"""
+    content: str = Field(..., description="Text content or JSON string to ingest")
+    metadata: Optional[dict] = Field(default={}, description="Optional metadata (source, category, etc.)")
+    document_name: Optional[str] = Field(default="api_document", description="Name for this document")
+
+
+class TextIngestionResponse(BaseModel):
+    """Response model for text ingestion"""
+    success: bool = Field(..., description="Whether ingestion was successful")
+    message: str = Field(..., description="Status message")
+    document_id: str = Field(..., description="Unique identifier for the ingested document")
+    chunks_created: int = Field(..., description="Number of text chunks created")
+
+
+class DocumentUpdateRequest(BaseModel):
+    """Request model for updating an existing document"""
+    document_id: str = Field(..., description="ID of the document to update")
+    content: str = Field(..., description="New content for the document")
+    metadata: Optional[dict] = Field(default={}, description="Updated metadata")
+    document_name: Optional[str] = Field(None, description="Updated document name")
+
+
+class DocumentDeleteRequest(BaseModel):
+    """Request model for deleting a document"""
+    document_id: str = Field(..., description="ID of the document to delete")
+
+
+class DocumentDeleteResponse(BaseModel):
+    """Response model for document deletion"""
+    success: bool = Field(..., description="Whether deletion was successful")
+    message: str = Field(..., description="Status message")
+    document_id: str = Field(..., description="ID of the deleted document")
+    chunks_deleted: int = Field(..., description="Number of chunks deleted")
